@@ -1,0 +1,210 @@
+.sidebar {
+  width: 248px;
+  min-height: 100vh;
+  background: var(--mf-sidebar);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  border-right: 1px solid var(--mf-border);
+  box-shadow: var(--mf-sidebar-shadow);
+}
+
+.sidebar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background: var(--mf-border);
+  border-radius: 10px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background: var(--mf-border-strong);
+}
+
+/* ── Logo ── */
+.logoSection {
+  text-align: center;
+  padding: 1.5rem 0.75rem 1.1rem;
+  border-bottom: 1px solid var(--mf-border);
+}
+
+.logoIcon {
+  font-size: 2.1rem;
+  filter: drop-shadow(0 0 10px var(--mf-accent-strong));
+}
+
+.logoTitle {
+  color: var(--mf-text-primary);
+  font-weight: 700;
+  margin-top: 0.25rem;
+  font-size: 1.15rem;
+  letter-spacing: 0.05em;
+}
+
+.logoSubtitle {
+  color: var(--mf-text-secondary);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* ── Perfil ── */
+.profileSection {
+  padding: 0.9rem 0.9rem;
+  border-bottom: 1px solid var(--mf-border);
+}
+
+.profileRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mf-on-accent);
+  font-weight: 700;
+  flex-shrink: 0;
+  font-size: 1rem;
+  box-shadow: 0 0 0 2px var(--mf-border-strong);
+}
+
+.profileInfo {
+  min-width: 0;
+}
+
+.profileEmail {
+  color: var(--mf-text-primary);
+  font-weight: 600;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profileBadge {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-top: 0.35rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  background: var(--mf-accent);
+  color: var(--mf-on-accent);
+}
+
+/* ── Navegación ── */
+.nav {
+  padding: 0.35rem 0;
+  flex: 1;
+}
+
+.navSectionLabel,
+.navSectionLabelAdmin {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--mf-text-tertiary);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 18px 20px 6px;
+}
+
+.navSectionLabelAdmin {
+  padding-top: 20px;
+}
+
+.navIcon {
+  font-size: 1rem;
+  width: 20px;
+  text-align: center;
+}
+
+/* ── Nav link (base) ── */
+.navLink,
+.navLinkAdmin {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  text-decoration: none;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--mf-text-secondary);
+  border-left: 3px solid transparent;
+  transition: all 0.2s ease;
+  margin-right: 8px;
+  border-radius: 0 8px 8px 0;
+}
+
+.navLink:hover,
+.navLinkAdmin:hover {
+  background: var(--mf-hover);
+  color: var(--mf-text-primary);
+}
+
+.navLink:focus-visible,
+.navLinkAdmin:focus-visible,
+.logoutButton:focus-visible {
+  outline: none;
+  box-shadow: var(--mf-focus-ring);
+}
+
+.navLinkActive {
+  background: var(--mf-accent-strong);
+  color: var(--mf-text-primary);
+  border-left: 3px solid var(--mf-accent);
+}
+
+/* ── Admin nav link (tinte de sección exclusiva) ── */
+.navLinkAdmin {
+  border-left: 3px solid var(--mf-accent-strong);
+}
+
+.navLinkAdminActive {
+  background: var(--mf-accent-strong);
+  color: var(--mf-text-primary);
+  border-left: 3px solid var(--mf-accent);
+}
+
+/* ── Logout (botón outline, consistente con la app) ── */
+.logoutSection {
+  padding: 0.8rem;
+  border-top: 1px solid var(--mf-border);
+}
+
+.logoutButton {
+  width: 100%;
+  background: transparent;
+  color: var(--mf-text-secondary);
+  border: 1px solid var(--mf-border);
+  border-radius: 8px;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.logoutButton:hover {
+  background: var(--mf-error-soft);
+  color: var(--mf-error);
+  border-color: var(--mf-error);
+}

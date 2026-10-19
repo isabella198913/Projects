@@ -1,0 +1,601 @@
+// backend/routes/planRoutes.js
+// ─── Rutas de planes de entrenamiento y nutricionales ────────
+// Router montado en '/planes' (ver server.js). Middleware base requerido para
+// TODAS las rutas: requireAuth (token JWT válido). Sobre la base:
+//   · Lecturas por ciclo → requireOwnCiclo (Staff o el afiliado dueño del ciclo;
+//     es lo que permite al MÓVIL del afiliado ver su propio plan).
+//   · Mutaciones → requireAdminOrEntrenador (solo Admin/Entrenador crean planes).
+// Un plus de seguridad: aunque web y móvil comparten estos endpoints, el móvil
+// nunca puede editar planes porque requireOwnCiclo no concede escritura.
+// Mapa de rutas (los bloques @swagger de cada una documentan body y respuestas).
+'use strict';
+
+const express         = require('express');
+const router          = express.Router();
+const PlanController  = require('../controllers/planController');
+const { requireAuth, requireAdminOrEntrenador, requireOwnCiclo } = require('../middlewares/auth');
+
+/**
+ * @swagger
+ * tags:
+ *   name: Planes
+ *   description: Planes de entrenamiento y nutricionales por ciclo
+ */
+
+// ─────────────────────────────────────────────────────────────
+// PLANES DE ENTRENAMIENTO
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * @swagger
+ * /planes/entrenamiento/{id_ciclo}:
+ *   get:
+ *     summary: Obtener plan de entrenamiento de un ciclo
+ *     description: Devuelve el plan con sus rutinas y ejercicios usando JSON_ARRAYAGG (sin N+1).
+ *     tags: [Planes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id_ciclo
+ *         in: path
+ *         required: true
+ *         schema: { type: integer }
+ *         description: ID del ciclo
+ *     responses:
+ *       200:
+ *         description: Plan de entrenamiento con rutinas y ejercicios
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id_ciclo:     { type: integer }
+ *                 observaciones:
+ *                   type: string
+ *                   nullable: true
+ *                 rutinas:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id_rutina:      { type: integer }
+ *                       nombre_rutina:  { type: string }
+ *                       enfoque_muscular: { type: string }
+ *                       dia_numero:     { type: integer, minimum: 1, maximum: 7 }
+ *                       ejercicios:     { type: array }
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       404:
+ *         description: Plan de entrenamiento no encontrado para este ciclo
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         $ref: '#/components/responses/InternalError'
+ */
+router.get('/entrenamiento/:id_ciclo', requireAuth, requireOwnCiclo, PlanController.getEntrenamiento);
+
+/**
+ * @swagger
+ * /planes/entrenamiento/{id_ciclo}/rutina/{dia_numero}:
+ *   get:
+ *     summary: Obtener la rutina del día filtrada por su grupo muscular (FASE A.3)
+ *     description: >
+ *       Devuelve la rutina del día indicado con SOLO los ejercicios cuyo
+ *       grupo_muscular coincide con el enfoque_muscular de la rutina (grupo
+ *       muscular del día). Opcional: ?grupo_muscular= para sobrescribir el filtro.
+ *     tags: [Planes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id_ciclo
+ *         required: true
+ *         schema: { type: integer }
+ *         description: Identificador del ciclo
+ *       - in: path
+ *         name: dia_numero
+ *         required: true
+ *         schema: { type: integer, minimum: 1, maximum: 7 }
+ *         description: Día de la semana (1=domingo … 7=sábado)
+ *       - in: query
+ *         name: grupo_muscular
+ *         required: false
+ *         schema: { type: string }
+ *         description: Grupo muscular por el que filtrar (default: enfoque_muscular del día)
+ *     responses:
+ *       200:
+ *         description: Rutina del día con ejercicios filtrados
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id_rutina:      { type: integer }
+ *                 nombre_rutina:  { type: string }
+ *                 enfoque_muscular: { type: string }
+ *                 dia_numero:     { type: integer }
+ *                 ejercicios:     { type: array }
+ *       400:
+ *         description: dia_numero inválido
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       404:
+ *         description: No hay rutina para ese día en este ciclo
+ *       500:
+ *         $ref: '#/components/responses/InternalError'
+ */
+router.get('/entrenamiento/:id_ciclo/rutina/:dia_numero', requireAuth, requireOwnCiclo, PlanController.getRutinaDiaria);
+
+/**
+ * @swagger
+ * /planes/entrenamiento:
+ *   post:
+ *     summary: Crear plan de entrenamiento para un ciclo (Admin o Entrenador)
+ *     tags: [Planes]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [id_ciclo]
+ *             properties:
+ *               id_ciclo:     { type: integer, example: 1 }
+ *               observaciones:
+ *                 type: string
+ *                 nullable: true
+ *     responses:
+ *       201:
+ *         description: Plan de entrenamiento creado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id_ciclo: { type: integer }
+ *                 message:  { type: string }
+ *       400:
+ *         description: id_ciclo faltante o plan ya existente para ese ciclo
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ *       500:
+ *         $ref: '#/components/responses/InternalError'
+ */
+router.post('/entrenamiento', requireAuth, requireAdminOrEntrenador, PlanController.createEntrenamiento);
+
+/**
+ * @swagger
+ * /planes/entrenamiento/{id}:
+ *   patch:
+ *     summary: Actualizar observaciones del plan de entrenamiento (Admin o Entrenador)
+ *     tags: [Planes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - $ref: '#/components/parameters/idParam'
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               observaciones: { type: string }
+ *     responses:
+ *       200:
+ *         description: Plan actualizado correctamente
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ *       500:
+ *         $ref: '#/components/responses/InternalError'
+ */
+router.patch('/entrenamiento/:id', requireAuth, requireAdminOrEntrenador, PlanController.updateEntrenamiento);
+
+// ─────────────────────────────────────────────────────────────
+// RUTINAS
+// ─────────────────────────────────────────────────────────────
+// Todas las rutas de rutinas/ejercicios son mutaciones → requireAdminOrEntrenador.
+
+/**
+ * @swagger
+ * /planes/rutinas:
+ *   post:
+ *     summary: Crear rutina en un plan de entrenamiento (Admin o Entrenador)
+ *     tags: [Planes]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [id_ciclo, nombre_rutina, dia_numero]
+ *             properties:
+ *               id_ciclo:          { type: integer, example: 1 }
+ *               nombre_rutina:     { type: string,  example: Día de Piernas }
+ *               enfoque_muscular:  { type: string,  enum: [Piernas, Pecho, Espalda, Hombros, Biceps, Triceps, Core, Gluteos, Full Body, Empuje, Jale] }
+ *               dia_numero:        { type: integer, minimum: 1, maximum: 7, example: 1, description: '1=Lunes … 7=Domingo' }
+ *     responses:
+ *       201:
+ *         description: Rutina creada correctamente
+ *       400:
+ *         description: Datos faltantes o día duplicado en el ciclo
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ *       500:
+ *         $ref: '#/components/responses/InternalError'
+ */
+router.post('/rutinas', requireAuth, requireAdminOrEntrenador, PlanController.createRutina);
+
+/**
+ * @swagger
+ * /planes/rutinas/{id_rutina}/ejercicios:
+ *   post:
+ *     summary: Añadir ejercicio a una rutina (Admin o Entrenador)
+ *     tags: [Planes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id_rutina
+ *         in: path
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [id_ejercicio, series, repeticiones, orden]
+ *             properties:
+ *               id_ejercicio: { type: integer, example: 5 }
+ *               series:       { type: integer, example: 4 }
+ *               repeticiones: { type: integer, example: 12 }
+ *               orden:        { type: integer, example: 1, description: Posición dentro de la rutina }
+ *     responses:
+ *       201:
+ *         description: Ejercicio añadido a la rutina
+ *       400:
+ *         description: Ejercicio/orden duplicado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ *       500:
+ *         $ref: '#/components/responses/InternalError'
+ */
+router.post('/rutinas/:id_rutina/ejercicios', requireAuth, requireAdminOrEntrenador, PlanController.addEjercicio);
+
+/**
+ * @swagger
+ * /planes/rutinas/{id_rutina}/ejercicios/{id_ejercicio}:
+ *   delete:
+ *     summary: Quitar ejercicio de una rutina (Admin o Entrenador)
+ *     tags: [Planes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id_rutina
+ *         in: path
+ *         required: true
+ *         schema: { type: integer }
+ *       - name: id_ejercicio
+ *         in: path
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Ejercicio eliminado de la rutina
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ *       500:
+ *         $ref: '#/components/responses/InternalError'
+ */
+router.delete('/rutinas/:id_rutina/ejercicios/:id_ejercicio', requireAuth, requireAdminOrEntrenador, PlanController.removeEjercicio);
+
+/**
+ * @swagger
+ * /planes/rutinas/{id_rutina}/ejercicios/{id_ejercicio}:
+ *   patch:
+ *     summary: Actualizar serie/reps/peso/descanso de un ejercicio en la rutina (Admin o Entrenador)
+ *     tags: [Planes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id_rutina
+ *         in: path
+ *         required: true
+ *         schema: { type: integer }
+ *       - name: id_ejercicio
+ *         in: path
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               series:       { type: integer, minimum: 1 }
+ *               repeticiones: { type: integer, minimum: 1 }
+ *               peso_kg:      { type: number, minimum: 0 }
+ *               descanso_seg: { type: integer, minimum: 0 }
+ *               descripcion:  { type: string, description: Instrucciones del ejercicio (catálogo) }
+ *     responses:
+ *       200:
+ *         description: Ejercicio actualizado correctamente
+ *       400:
+ *         description: Sin campos o valores inválidos
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       404:
+ *         description: Ejercicio no encontrado en esa rutina
+ *       500:
+ *         $ref: '#/components/responses/InternalError'
+ */
+router.patch('/rutinas/:id_rutina/ejercicios/:id_ejercicio', requireAuth, requireAdminOrEntrenador, PlanController.updateEjercicio);
+
+/**
+ * @swagger
+ * /planes/rutinas/{id_rutina}:
+ *   delete:
+ *     summary: Eliminar rutina y sus ejercicios asociados (Admin o Entrenador)
+ *     tags: [Planes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id_rutina
+ *         in: path
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Rutina eliminada correctamente
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ *       500:
+ *         $ref: '#/components/responses/InternalError'
+ */
+router.delete('/rutinas/:id_rutina', requireAuth, requireAdminOrEntrenador, PlanController.deleteRutina);
+
+// ─────────────────────────────────────────────────────────────
+// PLANES NUTRICIONALES
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * @swagger
+ * /planes/nutricional/{id_ciclo}:
+ *   get:
+ *     summary: Obtener plan nutricional de un ciclo
+ *     tags: [Planes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id_ciclo
+ *         in: path
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Plan nutricional con detalle de alimentos por comida
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id_ciclo:          { type: integer }
+ *                 calorias_objetivo: { type: number,  example: 2200.0 }
+ *                 num_comidas:       { type: integer, example: 5 }
+ *                 detalle:           { type: array }
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       404:
+ *         description: Plan nutricional no encontrado para este ciclo
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         $ref: '#/components/responses/InternalError'
+ */
+router.get('/nutricional/:id_ciclo', requireAuth, requireOwnCiclo, PlanController.getNutricional);
+
+/**
+ * @swagger
+ * /planes/nutricional:
+ *   post:
+ *     summary: Crear plan nutricional para un ciclo (Admin o Entrenador)
+ *     tags: [Planes]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [id_ciclo, calorias_objetivo, num_comidas]
+ *             properties:
+ *               id_ciclo:          { type: integer, example: 1 }
+ *               calorias_objetivo: { type: number,  example: 2200.0, description: 'Rango: 500–10000 kcal' }
+ *               num_comidas:       { type: integer, example: 5, description: 'Rango: 1–10 comidas/día' }
+ *               observaciones:
+ *                 type: string
+ *                 nullable: true
+ *     responses:
+ *       201:
+ *         description: Plan nutricional creado
+ *       400:
+ *         description: Datos faltantes o plan ya existente para ese ciclo
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ *       500:
+ *         $ref: '#/components/responses/InternalError'
+ */
+router.post('/nutricional', requireAuth, requireAdminOrEntrenador, PlanController.createNutricional);
+
+/**
+ * @swagger
+ * /planes/nutricional/{id_plan}/detalle:
+ *   post:
+ *     summary: Agregar alimento a una comida del plan nutricional (Admin o Entrenador)
+ *     tags: [Planes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id_plan
+ *         in: path
+ *         required: true
+ *         schema: { type: integer }
+ *         description: id_ciclo del plan nutricional
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [id_alimento, num_comida, cantidad_g]
+ *             properties:
+ *               id_alimento: { type: integer, example: 3 }
+ *               num_comida:  { type: integer, example: 2, description: Número de comida del día (1–10) }
+ *               cantidad_g:  { type: number,  example: 200.0, description: Cantidad en gramos }
+ *     responses:
+ *       201:
+ *         description: Alimento añadido al plan nutricional
+ *       400:
+ *         description: Alimento ya existe en esa comida del plan
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ *       500:
+ *         $ref: '#/components/responses/InternalError'
+ */
+router.patch('/nutricional/:id', requireAuth, requireAdminOrEntrenador, PlanController.updateNutricional);
+
+// Nota de ordenamiento: PATCH /nutricional/:id y POST /nutricional/:id_plan/detalle
+// conviven sin conflicto porque son métodos distintos (PATCH no matchea POST y el
+// path de detalle tiene un segmento extra). Ambos endpoints reciben el id_ciclo
+// como parámetro de ruta (:id / :id_plan).
+router.post('/nutricional/:id_plan/detalle', requireAuth, requireAdminOrEntrenador, PlanController.addAlimento);
+
+/**
+ * @swagger
+ * /planes/nutricional/{id_plan}/detalle/{id_detalle}:
+ *   patch:
+ *     summary: Actualizar cantidad o mover de comida un alimento del plan (Admin o Entrenador)
+ *     tags: [Planes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id_plan
+ *         in: path
+ *         required: true
+ *         schema: { type: integer }
+ *         description: id_ciclo del plan nutricional
+ *       - name: id_detalle
+ *         in: path
+ *         required: true
+ *         schema: { type: integer }
+ *         description: id_alimento dentro del plan
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               cantidad_gramos: { type: number, example: 150 }
+ *               num_comida:      { type: integer, description: Comida nueva (1-10) }
+ *               num_comida_anterior:
+ *                 type: integer
+ *                 description: Comida actual del alimento (requerido para moverlo)
+ *     responses:
+ *       200:
+ *         description: Detalle nutricional actualizado
+ *       400:
+ *         description: Sin campos o cantidad inválida
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       404:
+ *         description: Alimento no encontrado en ese plan
+ *       409:
+ *         description: El alimento ya está en la comida destino
+ *       500:
+ *         $ref: '#/components/responses/InternalError'
+ */
+router.patch('/nutricional/:id_plan/detalle/:id_detalle', requireAuth, requireAdminOrEntrenador, PlanController.updateDetalle);
+
+/**
+ * @swagger
+ * /planes/nutricional/{id_plan}/detalle/{id_detalle}:
+ *   delete:
+ *     summary: Eliminar un alimento del plan nutricional (Admin o Entrenador)
+ *     tags: [Planes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id_plan
+ *         in: path
+ *         required: true
+ *         schema: { type: integer }
+ *       - name: id_detalle
+ *         in: path
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               num_comida: { type: integer, description: 'Opcional: borra solo esa comida' }
+ *     responses:
+ *       200:
+ *         description: Alimento eliminado del plan nutricional
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       404:
+ *         description: Alimento no encontrado en ese plan
+ *       500:
+ *         $ref: '#/components/responses/InternalError'
+ */
+router.delete('/nutricional/:id_plan/detalle/:id_detalle', requireAuth, requireAdminOrEntrenador, PlanController.removeDetalle);
+
+module.exports = router;
